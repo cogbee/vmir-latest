@@ -1053,7 +1053,7 @@ eval_constexprs(ir_unit_t *iu)
  */
 static int
 value_create_global(ir_unit_t *iu, int pointee_type, int pointer_type,
-                    int alignment)
+                    int alignment, int offset, int size)
 {
   if(alignment == 0)
     alignment = type_alignment(iu, pointee_type);
@@ -1069,6 +1069,8 @@ value_create_global(ir_unit_t *iu, int pointee_type, int pointer_type,
   iu->iu_data_ptr = VMIR_ALIGN(iu->iu_data_ptr, alignment);
   ig->ig_addr = iu->iu_data_ptr;
   ig->ig_size = type_sizeof(iu, pointee_type);
+  ig->str_offset = offset;
+  ig->str_size = size;
   iu->iu_data_ptr += type_sizeof(iu, pointee_type);
   return val_id;
 }

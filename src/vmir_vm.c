@@ -641,7 +641,7 @@ vm_exec(uint16_t *I, void *rf, void *ret, const vm_frame_t *P)
 #endif
 
   int r;
-  int16_t opc;
+  uint16_t opc;
   vm_frame_t F = *P;
   ir_unit_t *iu = F.iu;
   void *hostmem = iu->iu_mem;
@@ -666,6 +666,7 @@ vm_exec(uint16_t *I, void *rf, void *ret, const vm_frame_t *P)
     RESTORE_CURRENT_FRAME();
 
 #ifndef VM_DONT_USE_COMPUTED_GOTO
+  // TODO(cogbee): why Here must use fflush(stdout), or it will be crashed.
 #define NEXT(skip) I+=skip; opc = *I++; goto *(&&opz + opc)
 #define VMOP(x) x:
 
@@ -2327,8 +2328,6 @@ vm_resolve(uint16_t opcode)
   return opcode;
 #else
   int o = vm_exec(&opcode, NULL, NULL, NULL);
-  assert(o <= INT16_MAX);
-  assert(o >= INT16_MIN);
   return o;
 #endif
 }
@@ -4990,6 +4989,7 @@ vmir_vm_function_call(ir_unit_t *iu, ir_function_t *f, void *out, ...)
   void *rfa = rf + argpos;
 
   for(int i = 0; i < it->it_function.num_parameters; i++) {
+
     const ir_type_t *arg = &VECTOR_ITEM(&iu->iu_types,
                                         it->it_function.parameters[i]);
     switch(legalize_type(arg)) {
@@ -5051,6 +5051,7 @@ vmir_vm_function_call(ir_unit_t *iu, ir_function_t *f, void *out, ...)
 #endif
     };
 
+
     if(f->if_ext_func != NULL) {
       r = f->if_ext_func(out, rfa, iu, iu->iu_mem);
     } else {
@@ -5061,7 +5062,6 @@ vmir_vm_function_call(ir_unit_t *iu, ir_function_t *f, void *out, ...)
       r = VM_STOP_UNCAUGHT_EXCEPTION;
   }
   iu->iu_err_jmpbuf = prevjb;
-
 #ifndef VM_NO_STACK_FRAME
   uint32_t stackuse = allocapeak - allocaptr;
 

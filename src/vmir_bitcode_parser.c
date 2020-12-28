@@ -105,6 +105,11 @@ blockinfo_rec_handler(ir_unit_t *iu, int op,
  * GLOBALVAR: [pointer type, isconst, initid,
  *             linkage, alignment, section, visibility, threadlocal,
  *             unnamed_addr, dllstorageclass]
+ * the following is right.
+ *  [GLOBALVAR, strtab offset, strtab size, pointer type, isconst, initid, 
+      linkage, alignment, section, visibility, threadlocal, unnamed_addr, 
+      externally_initialized, dllstorageclass, comdat, attributes, 
+      preemptionspecifier]
  */
 static void
 module_globalvar(ir_unit_t *iu, unsigned int argc, const int64_t *argv)
@@ -112,25 +117,26 @@ module_globalvar(ir_unit_t *iu, unsigned int argc, const int64_t *argv)
   if(argc < 6)
     parser_error(iu, "Bad number of args for global var def");
 
-  int explicit_type = argv[1] & 2;
+  int explicit_type = argv[3] & 2;
   unsigned int type, pointee;
 
 
   if(explicit_type) {
-    pointee = argv[0];
+    pointee = argv[2];
     type = type_make_pointer(iu, pointee, 0);
     if(type == -1)
       parser_error(iu, "No pointer type for pointee '%s'",
                    type_str_index(iu, pointee));
   } else {
-    type = argv[0];
+    type = argv[2];
     pointee = type_get_pointee(iu, type);
   }
 
+  // TODO(add the name for global var)
   const int val_id =
-    value_create_global(iu, pointee, type, vmir_llvm_alignment(argv[4], 4));
+    value_create_global(iu, pointee, type, vmir_llvm_alignment(argv[6], 4), argv[0], argv[1]);
 
-  const unsigned int initializer = argv[2];
+  const unsigned int initializer = argv[4];
   if(initializer > 0) {
     ir_initializer_t ii = {val_id, initializer - 1};
     VECTOR_PUSH_BACK(&iu->iu_initializers, ii);
@@ -142,6 +148,9 @@ module_globalvar(ir_unit_t *iu, unsigned int argc, const int64_t *argv)
  * FUNCTION:  [type, callingconv, isproto, linkage, paramattr,
  *             alignment, section, visibility, gc, unnamed_addr,
  *             dllstorageclass]
+ [FUNCTION, strtab offset, strtab size, type, callingconv, isproto, 
+ linkage, paramattr, alignment, section, visibility, gc, prologuedata, 
+ dllstorageclass, comdat, prefixdata, personalityfn, preemptionspecifier]
  */
 static void
 module_function(ir_unit_t *iu, unsigned int argc, const int64_t *argv)
@@ -149,7 +158,7 @@ module_function(ir_unit_t *iu, unsigned int argc, const int64_t *argv)
   if(argc < 8)
     parser_error(iu, "Bad number of args");
 
-  unsigned int type = argv[0];
+  unsigned int type = argv[2];
   ir_type_t *it = type_get(iu, type);
   if(it->it_code == IR_TYPE_POINTER)
     type = it->it_pointer.pointee;
@@ -157,8 +166,14 @@ module_function(ir_unit_t *iu, unsigned int argc, const int64_t *argv)
   ir_function_t *f = calloc(1, sizeof(ir_function_t));
 
   TAILQ_INIT(&f->if_bbs);
-  f->if_isproto = !!argv[2];
+  // what is !!?????????????(TODO)
+  // isproto:Non-zero if this entry represents a declaration rather than a definition
+  f->if_isproto = !!argv[4];
   f->if_type = type;
+
+  // cogbee TODO...
+  f->str_offset = argv[0];
+  f->str_size = argv[1];
 
   if(!f->if_isproto)
     TAILQ_INSERT_TAIL(&iu->iu_functions_with_bodies, f, if_body_link);
@@ -174,17 +189,19 @@ module_function(ir_unit_t *iu, unsigned int argc, const int64_t *argv)
 
 /**
  * ALIAS: [alias type, aliasee val#, linkage]
+ [ALIAS, strtab offset, strtab size, alias type, aliasee val#, 
+ linkage, visibility, dllstorageclass, threadlocal, unnamed_addr, preemptionspecifier]
  */
 static void
 module_alias(ir_unit_t *iu, unsigned int argc, const int64_t *argv)
 {
-  if(argc < 3)
+  if(argc < 4)
     parser_error(iu, "Bad number of args");
 
   ir_value_t *iv = value_append_and_get(iu);
   iv->iv_class = IR_VC_ALIAS;
-  iv->iv_type = argv[0];
-  iv->iv_reg = argv[1];
+  iv->iv_type = argv[2];
+  iv->iv_reg = argv[3];
 }
 
 
@@ -376,6 +393,8 @@ static void
 dummy_rec_handler(ir_unit_t *iu, int op,
                   unsigned int argc, const int64_t *argv)
 {
+  // printf("op=%d\n", op);
+  // printf("dummy_rec_handler, argc=%d\n", argc);
 }
 
 
@@ -389,47 +408,50 @@ set_value_name(ir_unit_t *iu, int vid, char *str)
   free(iv->iv_name);
   iv->iv_name = strdup(str);
 
-  switch(iv->iv_class) {
-  case IR_VC_FUNCTION:
-    free(iv->iv_func->if_name);
-    iv->iv_func->if_name = str;
-    if(iv->iv_func->if_ext_func == NULL) {
-      if(!vmop_resolve(iv->iv_func)) {
-        iv->iv_func->if_ext_func =
-          (void *)iu->iu_external_function_resolver(iv->iv_func->if_name, iu->iu_opaque);
-      }
-    }
+  // switch(iv->iv_class) {
+  // case IR_VC_FUNCTION:
+  //   printf("set_value_name, IR_VC_FUNCTION\n");
+  //   free(iv->iv_func->if_name);
+  //   iv->iv_func->if_name = str;
+  //   if(iv->iv_func->if_ext_func == NULL) {
+  //     if(!vmop_resolve(iv->iv_func)) {
+  //       iv->iv_func->if_ext_func =
+  //         (void *)iu->iu_external_function_resolver(iv->iv_func->if_name, iu->iu_opaque);
+  //     }
+  //   }
 
-    if(iu->iu_debug_flags & VMIR_DBG_LIST_FUNCTIONS) {
-      const ir_function_t *f = iv->iv_func;
-      printf("Function %-10s %s\n",
-             !f->if_isproto ? "defined" :
-             f->if_vmop != 0 ? "vmop" :
-             f->if_ext_func != NULL ? "external" :
-             "undefined",
-             f->if_name);
+  //   if(iu->iu_debug_flags & VMIR_DBG_LIST_FUNCTIONS) {
+  //     const ir_function_t *f = iv->iv_func;
+  //     printf("Function %-10s %s\n",
+  //            !f->if_isproto ? "defined" :
+  //            f->if_vmop != 0 ? "vmop" :
+  //            f->if_ext_func != NULL ? "external" :
+  //            "undefined",
+  //            f->if_name);
 
-    }
-    break;
+  //   }
+  //   break;
 
-  case IR_VC_GLOBALVAR:
-    free(iv->iv_gvar->ig_name);
-    iv->iv_gvar->ig_name = str;
-    break;
+  // case IR_VC_GLOBALVAR:
+  //   printf("set_value_name IR_VC_GLOBALVAR\n");
+  //   free(iv->iv_gvar->ig_name);
+  //   iv->iv_gvar->ig_name = str;
+  //   break;
 
-  case IR_VC_CONSTANT:
-  case IR_VC_ZERO_INITIALIZER:
-  case IR_VC_TEMPORARY:
-  case IR_VC_REGFRAME:
-  case IR_VC_ALIAS:
-    free(str);
-    break;
+  // case IR_VC_CONSTANT:
+  // case IR_VC_ZERO_INITIALIZER:
+  // case IR_VC_TEMPORARY:
+  // case IR_VC_REGFRAME:
+  // case IR_VC_ALIAS:
+  //   printf("set_value_name, IR_VC_CONSTANT\n");
+  //   free(str);
+  //   break;
 
-  default:
-    parser_error(iu, "Can't give name %s to value of class %d\n",
-                 str, iv->iv_class);
-    break;
-  }
+  // default:
+  //   parser_error(iu, "Can't give name %s to value of class %d\n",
+  //                str, iv->iv_class);
+  //   break;
+  // }
 }
 
 
@@ -457,7 +479,9 @@ value_symtab_rec_handler(ir_unit_t *iu, int op,
 
   case 3: // VST_CODE_FNENTRY
     if(argc < 3)
-      parser_error(iu, "Bad args to VST_CODE_FNENTRY");
+      break;
+    // cogbee
+      // parser_error(iu, "Bad args to VST_CODE_FNENTRY");
 
     vid = argv[0];
     str = read_str_from_argv(argc - 2, argv + 2);
@@ -689,6 +713,38 @@ metadata_attachment_rec_handler(ir_unit_t *iu, int op,
   //  prinargs(argv, argc);
 }
 
+// cogbee
+static void strtab_rec_handler(ir_unit_t *iu, int op, 
+                  unsigned int argc, const int64_t *argv) {
+
+  // Set Function name.
+  for(int i = 0; i < VECTOR_LEN(&iu->iu_functions); i++) {
+    ir_function_t *f = VECTOR_ITEM(&iu->iu_functions, i);
+    int str_offset = f->str_offset;
+    int str_size = f->str_size;
+    f->if_name = read_str_from_argv(str_size, argv + str_offset);
+    // printf("f->f_name=%s\n", f->if_name);
+
+    if(f->if_ext_func == NULL) {
+      if(!vmop_resolve(f)) {
+        f->if_ext_func =
+          (void *)iu->iu_external_function_resolver(f->if_name, iu->iu_opaque);
+      }
+    }
+  }
+
+  // Set global variable name.
+  for(int i = 0; i < VECTOR_LEN(&iu->iu_values); i++) {
+    ir_value_t *iv = VECTOR_ITEM(&iu->iu_values, i);
+    if(iv == NULL)
+      continue;
+    if (iv->iv_class == IR_VC_GLOBALVAR) {
+      iv->iv_gvar->ig_name = read_str_from_argv(iv->iv_gvar->str_size, argv + iv->iv_gvar->str_offset);
+      // printf("iv->iv_gvar->ig_name=%s\n", iv->iv_gvar->ig_name);
+    }
+  }
+}
+
 
 /**
  *
@@ -862,9 +918,11 @@ ir_enter_subblock(ir_unit_t *iu, bcbitstream_t *bs, int outer_id_width)
 
     if(iu->iu_vstoffset) {
       bcbitstream_t vstbs = *bs;
+      // TODO(why * 8???????????.....the older is * 4)
       vstbs.bytes_offset = iu->iu_vstoffset * 4;
       vstbs.remain = 0;
-      ir_parse_blocks(iu, outer_id_width, NULL, ibi, &vstbs);
+      // cogbee...... How to parse the vstbs for ahead.
+      // ir_parse_blocks(iu, 4, NULL, ibi, &vstbs);
       iu->iu_vstoffset = 0;
     }
 
@@ -895,12 +953,20 @@ ir_enter_subblock(ir_unit_t *iu, bcbitstream_t *bs, int outer_id_width)
   case BITCODE_TYPES_NEW:
     rh = types_new_rec_handler;
     break;
+  case BITCODE_STRTAB_BLOCK_ID:
+    rh = strtab_rec_handler;
+    break;
   case BITCODE_USELIST:
   case BITCODE_METADATA_KIND_BLOCK_ID:
   case BITCODE_IDENTIFICATION_BLOCK_ID:
   case BITCODE_OPERAND_BUNDLE_TAGS_BLOCK_ID:
+  case BITCODE_SYMTAB_BLOCK_ID:
     rh = dummy_rec_handler;
     break;
+  case BITCODE_SYNC_SCOPE_NAMES_BLOCK_ID:
+    //cogbee...
+    rh = dummy_rec_handler;
+    break; 
   default:
     parser_error(iu, "Invalid block type %d", blockid);
   }

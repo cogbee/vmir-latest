@@ -308,6 +308,8 @@ typedef struct ir_attrset {
 struct ir_function {
   TAILQ_ENTRY(ir_function) if_body_link;
   unsigned int if_type;
+  int str_offset;
+  int str_size;
   char *if_name;
   char if_isproto;
   char if_used;
@@ -344,6 +346,8 @@ struct ir_function {
 typedef struct ir_globalvar {
   TAILQ_ENTRY(ir_globalvar) ig_unit_link;
   unsigned int ig_type;
+  int str_offset;
+  int str_size;
   char *ig_name;
   uint32_t ig_addr;
   uint32_t ig_size;
@@ -912,6 +916,8 @@ vmir_load(ir_unit_t *iu, const uint8_t *u8, int len)
 #endif
 
   const uint32_t magic = read_bits(&bs, 32);
+  // crosss....cogbee
+  read_bits(&bs, 32*5);
   iu->iu_data_ptr = 4096;
   switch(magic) {
 
@@ -921,6 +927,7 @@ vmir_load(ir_unit_t *iu, const uint8_t *u8, int len)
     break;
 
   case 0xdec04342: // LLVM Bitcode
+  case 0x0b17c0de: // LLVM Bitcode
     // WebAssembly need memory at 0. Bitcode don't really.
     ir_parse_blocks(iu, 2, NULL, NULL, &bs);
     break;
@@ -944,13 +951,14 @@ vmir_load(ir_unit_t *iu, const uint8_t *u8, int len)
 
   iu->iu_vm_funcs  = calloc(VECTOR_LEN(&iu->iu_functions), sizeof(void *));
   iu->iu_function_table = calloc(VECTOR_LEN(&iu->iu_functions), sizeof(void *));
+  
   for(int i = 0; i < VECTOR_LEN(&iu->iu_functions); i++) {
     ir_function_t *f = VECTOR_ITEM(&iu->iu_functions, i);
 
     iu->iu_vm_funcs[i]  = f->if_vm_text;
     iu->iu_function_table[i] = f->if_ext_func;
     if(f->if_used && f->if_vm_text == NULL && f->if_ext_func == NULL) {
-      vmir_log(iu, VMIR_LOG_ERROR, "Function %s() is not defined", f->if_name);
+      vmir_log(iu, VMIR_LOG_ERROR, "....Function %s() is not defined", f->if_name);
       if(!(iu->iu_debug_flags & VMIR_DBG_IGNORE_UNRESOLVED_FUNCTIONS)) {
         parser_error(iu, "Function %s() is not defined", f->if_name);
       }
@@ -1046,8 +1054,9 @@ vmir_run(ir_unit_t *iu, int *retptr, int argc, char **argv)
 {
   ir_function_t *f;
   f = vmir_find_function(iu, "main");
-  if(f == NULL)
+  if(f == NULL) {
     return VM_STOP_BAD_FUNCTION;
+  }
 
   int vm_argv = vmir_argv_copy(iu, argc, argv);
 

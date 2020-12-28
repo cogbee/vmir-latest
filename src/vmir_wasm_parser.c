@@ -1326,7 +1326,8 @@ wasm_parse_section_global(ir_unit_t *iu, wasm_bytestream_t *wbs)
     const int pointer_type = type_make_pointer(iu, pointee_type, 1);
     const uint32_t mutable = wbs_get_vu32(wbs);
 
-    const int val_id = value_create_global(iu, pointee_type, pointer_type, 0);
+    // cogbee
+    const int val_id = value_create_global(iu, pointee_type, pointer_type, 0, 0, 0);
     const ir_valuetype_t vt = { val_id, pointer_type };
     VECTOR_PUSH_BACK(&iu->iu_wasm_globalvar_map, vt);
 

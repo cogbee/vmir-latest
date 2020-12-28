@@ -146,7 +146,6 @@ main(int argc, char **argv)
 
   uint8_t *buf = malloc(st.st_size);
   if(read(fd, buf, st.st_size) != st.st_size) {
-    perror("read");
     exit(1);
   }
   close(fd);
@@ -163,7 +162,8 @@ main(int argc, char **argv)
   if(verbose)
     vmir_set_log_level(iu, VMIR_LOG_DEBUG);
 
-  if(vmir_load(iu, buf, st.st_size)) {
+  int code = vmir_load(iu, buf, st.st_size);
+  if(code) {
     free(mem);
     free(buf);
     vmir_destroy(iu);
@@ -174,7 +174,7 @@ main(int argc, char **argv)
   if(run) {
     int64_t ts = get_ts();
     int rval;
-    vmir_run(iu, &rval, argc, argv);
+    code = vmir_run(iu, &rval, argc, argv);
     ts = get_ts() - ts;
     if(print_stats)
       printf("main() executed for %d ms\n", (int)(ts / 1000LL));

@@ -412,7 +412,6 @@ parse_call_or_invoke(ir_unit_t *iu, unsigned int argc, const int64_t *argv,
 {
   // http://llvm.org/docs/LangRef.html#call-instruction
   // http://llvm.org/docs/LangRef.html#invoke-instruction
-
   ir_bb_t *ib = iu->iu_current_bb;
 
   unsigned int attribute_set = instr_get_uint(iu, &argc, &argv) - 1;
@@ -458,13 +457,17 @@ parse_call_or_invoke(ir_unit_t *iu, unsigned int argc, const int64_t *argv,
   case IR_VC_FUNCTION:
     {
       const ir_function_t *f = fn->iv_func;
-      // Some functions that have no effect for us, drop them here
-      if(!strcmp(f->if_name, "llvm.lifetime.start") ||
-         !strcmp(f->if_name, "llvm.lifetime.end") ||
-         !strcmp(f->if_name, "llvm.prefetch") ||
-         !strcmp(f->if_name, "llvm.va_end"))
-        return;
-
+      // What I added cogbee......
+      if (f->if_name) {
+        
+        // Some functions that have no effect for us, drop them here
+        if(!strcmp(f->if_name, "llvm.lifetime.start") ||
+           !strcmp(f->if_name, "llvm.lifetime.end") ||
+           !strcmp(f->if_name, "llvm.prefetch") ||
+           !strcmp(f->if_name, "llvm.va_end")) {
+          return;
+        }
+      }
     }
     fnty = type_get(iu, fn->iv_type);
     break;

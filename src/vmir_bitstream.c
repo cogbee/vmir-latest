@@ -38,6 +38,7 @@ read_bits(bcbitstream_t *bs, int num)
 {
   int r = 0;
   int off = 0;
+  // printf("bs->bytes_offset=%d\n", bs->bytes_offset);
 
   while(num > 0) {
     if(bs->bytes_offset >= bs->bytes_length)
