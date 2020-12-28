@@ -21,21 +21,31 @@ The library is compiled from a single file [src/vmir.c](src/vmir.c) which in tur
 
 ### Example
 
-Let's create a small program and run it. Type the following well known snippet into a file called helloworld.c
+Let's create a small program and run it. Type the following well known snippet into a file called test.c
 ```
+#include <stdio.h>
+
+int k = 1111;
+int cogbee(int i) {
+  int tmp = k + i;
+  printf("i = %d\n", tmp);
+  return 22;
+}
 int main(void)
 {
+  cogbee(55);
   printf("Hello world\n");
   return 0;
 }
 ```
 Then compile it
 ```
-clang -emit-llvm -target le32-unknown-nacl -c helloworld.c -o helloworld.bc
+clang -emit-llvm -c test.c -o test.bc
 ```
 And finally, run it:
 ```
-$ ./vmir helloworld.bc
+$ ./vmir test.bc
+i = 1166
 Hello world
 ```
 
